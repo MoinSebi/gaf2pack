@@ -1,13 +1,13 @@
+use clap::Arg;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
+use std::io::{Write};
 use std::iter::repeat_with;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::io::{BufWriter, Write};
-use clap::Arg;
 
 fn main() {
     let matches = clap::App::new("gaf2pack")
@@ -20,14 +20,15 @@ fn main() {
                 .long("gfa")
                 .takes_value(true)
                 .about("Input GFA file")
-                .required(true)
+                .required(true),
         )
-        .arg(clap::Arg::new("alignment")
-            .short('a')
-            .long("alignment")
-            .takes_value(true)
-            .about("Input GAF file")
-            .required(true)
+        .arg(
+            clap::Arg::new("alignment")
+                .short('a')
+                .long("alignment")
+                .takes_value(true)
+                .about("Input GAF file")
+                .required(true),
         )
         .arg(
             clap::Arg::new("output")
@@ -35,18 +36,24 @@ fn main() {
                 .long("output")
                 .takes_value(true)
                 .about("Output file")
-                .required(true)
+                .required(true),
         )
-        .arg(Arg::new("threads")
-            .short('t')
-            .long("threads")
-            .takes_value(true)
-            .required(false)
-            .about("Number of threads")
-            .default_value("1")
-        ).get_matches();
+        .arg(
+            Arg::new("threads")
+                .short('t')
+                .long("threads")
+                .takes_value(true)
+                .required(false)
+                .about("Number of threads")
+                .default_value("1"),
+        )
+        .get_matches();
 
-    let threads = matches.value_of("threads").unwrap().parse::<usize>().unwrap();
+    let threads = matches
+        .value_of("threads")
+        .unwrap()
+        .parse::<usize>()
+        .unwrap();
     let graph_file = matches.value_of("gfa").unwrap();
     let alignment_file = matches.value_of("alignment").unwrap();
     let output_file = matches.value_of("output").unwrap();
@@ -65,7 +72,6 @@ fn main() {
     pack_wrapper(alignment_file, &node_size, &index, &result, threads).unwrap();
     eprintln!("Writing output file");
     write_pack(output_file, &node_size, &result).unwrap();
-
 }
 
 /// Fast parsing of a gfa file v1
@@ -219,7 +225,7 @@ fn parse_line(line: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<
     let path_len = lsplit.next().unwrap().parse::<usize>().unwrap();
     let offset = lsplit.next().unwrap().parse::<usize>().unwrap();
     let path_name = lsplit.next().unwrap().parse::<usize>().unwrap();
-    let path_total = lsplit.next().unwrap().parse::<usize>().unwrap();
+    let _path_total = lsplit.next().unwrap().parse::<usize>().unwrap();
 
     if path_len < path_name {
         return;
@@ -243,7 +249,6 @@ fn parse_line(line: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<
     }
     let mut totalc = 0;
 
-
     for x in cigar.iter() {
         if x.operation == CigarOperation::Match {
             for _y in 0..x.length {
@@ -258,7 +263,13 @@ fn parse_line(line: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<
     }
 }
 
-fn pack_wrapper(filename: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<AtomicUsize>>, threads: usize) -> io::Result<()> {
+fn pack_wrapper(
+    filename: &str,
+    nodes: &[usize],
+    index_index: &[usize],
+    res: &Arc<Vec<AtomicUsize>>,
+    threads: usize,
+) -> io::Result<()> {
     // Open the file
     let file = File::open(filename)?;
     let reader = io::BufReader::new(file);
@@ -279,14 +290,22 @@ fn pack_wrapper(filename: &str, nodes: &[usize], index_index: &[usize], res: &Ar
 }
 
 fn write_pack(outputfile: &str, nodes: &[usize], res: &Arc<Vec<AtomicUsize>>) -> io::Result<()> {
-    let mut file = File::create(outputfile)?;
+    let file = File::create(outputfile)?;
     let mut file = io::BufWriter::new(file);
     let mut c = 0;
     writeln!(file, "seq.pos\tnode.id\tnode.offset\tcoverage").expect("Not able to write");
 
     for (i, node_id) in nodes.iter().enumerate() {
         for x in 0..*node_id {
-            writeln!(file, "{}\t{}\t{}\t{}", c, i+1, x, res[c].load(Ordering::Relaxed)).expect("Not able to write");
+            writeln!(
+                file,
+                "{}\t{}\t{}\t{}",
+                c,
+                i + 1,
+                x,
+                res[c].load(Ordering::Relaxed)
+            )
+            .expect("Not able to write");
             c += 1;
         }
     }
