@@ -8,6 +8,7 @@ Processing cigar string for additional information. Multithreading via rayon. Pa
 
 ```
 git clone https://github.com/MoinSebi/gaf2pack
+cd gaf2pack
 cargo build --release
 ./target/release/gaf2pack -h 
 ```
