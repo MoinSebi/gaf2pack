@@ -2,12 +2,15 @@ use clap::Arg;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io;
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 use std::io::BufReader;
 use std::io::{Write};
 use std::iter::repeat_with;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::io::{Seek, SeekFrom};
+use rayon::ThreadPoolBuilder;
+
 
 fn main() {
     let matches = clap::App::new("gaf2pack")
@@ -47,6 +50,12 @@ fn main() {
                 .about("Number of threads")
                 .default_value("1"),
         )
+        .arg(Arg::new("method")
+            .short('m')
+            .long("method")
+            .required(false)
+            .about("New method")
+        )
         .get_matches();
 
     let threads = matches
@@ -57,11 +66,22 @@ fn main() {
     let graph_file = matches.value_of("gfa").unwrap();
     let alignment_file = matches.value_of("alignment").unwrap();
     let output_file = matches.value_of("output").unwrap();
+    let new_method = matches.is_present("method");
     eprintln!("Starting");
     eprintln!("Threads: {}", threads);
     eprintln!("Graph: {}", graph_file);
     eprintln!("Alignment: {}", alignment_file);
     eprintln!("Output: {}", output_file);
+    if new_method {
+        split_method(graph_file, alignment_file, output_file, threads);
+    } else {
+        rayon_run(graph_file, alignment_file, output_file, threads);
+    }
+}
+
+pub fn rayon_run(graph_file: &str, alignment_file: &str, output_file: &str, threads: usize) {
+    eprintln!("Running rayon method");
+    eprintln!("Parsing GFA file");
     let (node_size, index, res) = parse_gfa_file(graph_file);
     let result = Arc::new(
         repeat_with(|| AtomicUsize::new(0))
@@ -182,15 +202,9 @@ fn parse_cigar_string(cigar_string: &str) -> Vec<CigarUnit> {
 
 /// Parse the path from a gaf file
 fn parse_path(s: &str) -> (Vec<usize>, Vec<bool>) {
-    let mut dirs = Vec::new();
+    let mut dirs = vec!['>' == s.chars().next().unwrap()];
     let mut node_id = Vec::new();
-    for c in s.chars() {
-        match c {
-            '>' => dirs.push(true),
-            '<' => dirs.push(false),
-            _ => (), // Ignore all other characters
-        }
-    }
+
     let mut k = String::new();
     for x in s[1..].chars() {
         if x.is_ascii_digit() {
@@ -310,4 +324,100 @@ fn write_pack(outputfile: &str, nodes: &[usize], res: &Arc<Vec<AtomicUsize>>) ->
         }
     }
     Ok(())
+}
+
+
+
+//---------------------------------TESTS---------------------------------//
+
+
+pub fn split_method(graph_file: &str, alignment_file: &str, output_file: &str, threads: usize){
+    eprintln!("Running new method");
+    eprintln!("Parsing GFA file");
+    let a =  count_lines_in_file(alignment_file).unwrap();
+    let (node_size, index, res) = parse_gfa_file(graph_file);
+    let result = Arc::new(
+        repeat_with(|| AtomicUsize::new(0))
+            .take(res)
+            .collect::<Vec<_>>(),
+    );
+
+    let pool = ThreadPoolBuilder::new().num_threads(threads).build().unwrap(); // Limit threads to 4
+
+
+    println!("Number of lines in file: {}", a);
+    let b = nth_newline_position(alignment_file, a/threads);
+    println!("Position of 100th newline: {:?}", b);
+    pool.install(|| {
+        b.par_windows(2).for_each(|x| {
+            tt(alignment_file, x[0], x[1], &node_size, &index, &result);
+        });
+    });
+
+    write_pack(output_file, &node_size, &result).unwrap();
+
+}
+
+fn count_lines_in_file(file_path: &str) -> io::Result<usize> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+
+    let mut line_count = 0;
+    for _ in reader.lines() {
+        line_count += 1;
+    }
+
+    Ok(line_count)
+}
+
+
+fn nth_newline_position(file_path: &str, n: usize) -> Vec<u64> {
+    let file = File::open(file_path).expect("Failed to open file");
+    let reader = BufReader::new(file);
+
+    let mut vv = Vec::new();
+    let mut bytes = 0;
+    let mut pp = String::new();
+    vv.push(0);
+    let mut i = 0;
+    for line in reader.lines(){
+        let line2 = line.unwrap();
+        bytes += line2.len() as u64 + 1;
+
+        if i >= n{
+            if pp != line2{
+                vv.push(bytes);
+                i = 0;
+            }
+            else {
+                i += 1;
+            }
+        } else {
+            i += 1
+        }
+    }
+    vv
+}
+
+fn tt(filename: &str, start_byte: u64, end_byte: u64, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<AtomicUsize>>) {
+    let file = File::open(filename).expect("Failed to open file");
+    let mut reader = BufReader::new(file);
+
+    // Move to the start position
+    reader.seek(SeekFrom::Start(start_byte)).expect("dasjkdjas");
+
+    // Calculate the number of bytes to read
+    let num_bytes_to_read = (end_byte - start_byte) as usize;
+    let mut buffer = vec![0; num_bytes_to_read];
+    reader.read_exact(&mut buffer).expect("dasjkdhaskd");
+    let mut old_line = String::new();
+    for (c, line) in buffer.lines().enumerate(){
+        let line2 = line.unwrap();
+
+        if line2 != old_line{
+            parse_line(&line2, nodes, index_index, res);
+            old_line = line2;
+        }
+    }
+
 }
