@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use std::io::Write;
-use std::io::{BufRead, Read};
+use std::io::{BufRead};
 use std::io::{Seek, SeekFrom};
 use std::iter::repeat_with;
 use std::sync::atomic::{AtomicUsize, Ordering};
