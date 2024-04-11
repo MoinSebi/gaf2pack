@@ -83,18 +83,23 @@ pub fn rayon_run(graph_file: &str, alignment_file: &str, output_file: &str, thre
     eprintln!("Running rayon method");
     eprintln!("Parsing GFA file");
     let (node_size, index, res) = parse_gfa_file(graph_file);
+
+   // Create a atomic vector
     let result = Arc::new(
         repeat_with(|| AtomicUsize::new(0))
             .take(res)
             .collect::<Vec<_>>(),
     );
     eprintln!("Running packer");
+    // This is the main function here
     pack_wrapper(alignment_file, &node_size, &index, &result, threads).unwrap();
     eprintln!("Writing output file");
     write_pack(output_file, &node_size, &result).unwrap();
 }
 
 /// Fast parsing of a gfa file v1
+///
+/// Number
 fn parse_gfa_file(filename: &str) -> (Vec<usize>, Vec<usize>, usize) {
     let mut nodes: Vec<[usize; 2]> = Vec::new();
     let file = File::open(filename).expect("Failed to open file");
@@ -131,14 +136,14 @@ fn parse_gfa_file(filename: &str) -> (Vec<usize>, Vec<usize>, usize) {
     (nodes2, index, res)
 }
 
-/// Index
+/// Create index
 ///
-/// output1. Node -> Vector pointer to the start of the coverage vector
-/// output2. Total size of the coverage vector
+/// Output:
+/// - output1. Node -> Vector pointer to the start of the coverage vector
+/// - output2. Total size of the coverage vector (and total size of the graph btw)
 fn find_change_points(sorted_vec: &[[usize; 2]]) -> (Vec<usize>, usize) {
     let mut change_points = Vec::new();
     let mut c = 0;
-    // If the vector is empty, return an empty list
 
     for x in sorted_vec.iter() {
         change_points.push(c);
@@ -201,6 +206,9 @@ fn parse_cigar_string(cigar_string: &str) -> Vec<CigarUnit> {
 }
 
 /// Parse the path from a gaf file
+///
+/// Input: <10>20
+/// Output: ([10, 20], [false, true])
 fn parse_path(s: &str) -> (Vec<usize>, Vec<bool>) {
     let mut dirs = vec![s.starts_with('>')];
     let mut node_id = Vec::new();
@@ -224,9 +232,9 @@ fn parse_path(s: &str) -> (Vec<usize>, Vec<bool>) {
     (node_id, dirs)
 }
 
+#[inline]
+/// Operation to parse a line and update the coverage vector
 fn parse_line(line: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<AtomicUsize>>) {
-    // Perform parsing for each line
-    // Replace this with your actual parsing logic
     let mut lsplit = line.split_whitespace();
 
     let subpath = lsplit.nth(5).unwrap();
@@ -277,6 +285,8 @@ fn parse_line(line: &str, nodes: &[usize], index_index: &[usize], res: &Arc<Vec<
     }
 }
 
+
+/// Open file and p
 fn pack_wrapper(
     filename: &str,
     nodes: &[usize],
@@ -303,6 +313,10 @@ fn pack_wrapper(
     Ok(())
 }
 
+
+/// Write a plain-text pack file
+///
+/// Same output format as vg pack
 fn write_pack(outputfile: &str, nodes: &[usize], res: &Arc<Vec<AtomicUsize>>) -> io::Result<()> {
     let file = File::create(outputfile)?;
     let mut file = io::BufWriter::new(file);
@@ -327,6 +341,7 @@ fn write_pack(outputfile: &str, nodes: &[usize], res: &Arc<Vec<AtomicUsize>>) ->
 }
 
 //---------------------------------TESTS---------------------------------//
+// This stuff is experimentally
 
 pub fn split_method(graph_file: &str, alignment_file: &str, output_file: &str, threads: usize) {
     eprintln!("Running new method");
@@ -411,12 +426,15 @@ fn tt(
 
     // Calculate the number of bytes to read
     let num_bytes_to_read = (end_byte - start_byte) as usize;
-    let mut buffer = vec![0; num_bytes_to_read];
-    reader.read_exact(&mut buffer).expect("dasjkdhaskd");
     let mut old_line = String::new();
-    for (_c, line) in buffer.lines().enumerate() {
-        let line2 = line.unwrap();
+    let mut bytes = 0;
+    for (_c, line) in reader.lines().enumerate() {
 
+        let line2 = line.unwrap();
+        bytes += line2.len() + 1;
+        if bytes >= num_bytes_to_read {
+            break;
+        }
         if line2 != old_line {
             parse_line(&line2, nodes, index_index, res);
             old_line = line2;

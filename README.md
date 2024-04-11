@@ -1,7 +1,7 @@
 # gaf2pack
 
 Convert GAF alignments (https://github.com/lh3/gfatools/blob/master/doc/rGFA.md) to pack format. 
-Processing cigar string for additional information. Multithreading via rayon. Pack (coverage) output is base pair level. 
+Processing cigar string for additional information. Multithreading via rayon. Pack (coverage) output is base-level. Run it with multiple threads to speed up the process otherwise it will take a long time.
 
 
 ## Installation
