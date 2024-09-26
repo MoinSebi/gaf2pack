@@ -16,5 +16,5 @@ cargo build --release
 ## Usage 
 
 ```
-./gaf2pack -g input.gaf -o output.pack -a alignment.gaf -t 10 
+./gaf2pack -g input.gfa -o output.pack -a alignment.gaf -t 10 
 ```
